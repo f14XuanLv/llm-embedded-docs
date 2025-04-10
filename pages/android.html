@@ -15,7 +15,7 @@ Termux提供了一个强大的包管理器，可以安装各种软件包和工�
 <p>先去 <a href="https://github.com/termux/termux-app/releases" target="_blank">https://github.com/termux/termux-app/releases</a> 下载最新的Termux安装包
 安装完成后，打开Termux应用程序。</p>
 
-<p><img src="images/Termux_phone0.jpg" alt="Termux界面" style="max-width: 40%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><img src="images/Termux_phone0.jpg" alt="Termux界面" style="max-width: 50%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <h4>初始配置Termux</h4>
 
@@ -55,7 +55,7 @@ IP地址（通常是192.168.x.x或10.x.x.x格式）<br>
 <p>使用远程工具（如MobaXterm或VSCode的SSH扩展）连接到Termux，使用
 用户名和密码登录。</p>
 
-<p><img src="images/Termux_MobaXterm.png" alt="MobaXterm连接" style="max-width: 80%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><img src="images/Termux_MobaXterm.png" alt="MobaXterm连接" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <p>手机上的Termux退出后，如果下次要再连接，需要重新启动SSH服务，并且查看IP地址是否与之前相同：</p>
 
@@ -92,7 +92,7 @@ make -j8 # 使用8个线程编译
 <a href="https://huggingface.co/Mungert/gemma-3-1b-it-gguf/tree/main" target="_blank">https://huggingface.co/Mungert/gemma-3-1b-it-gguf/tree/main</a>
 下载</p>
 
-<p><img src="images/Download_gemma-3-1b-it-gguf.png" alt="下载模型" style="max-width: 80%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><img src="images/Download_gemma-3-1b-it-gguf.png" alt="下载模型" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <p>google_gemma-3-1b-it-q4_k.gguf<br>
 然后通过ssh传输，将其放置在 llama.cpp/models/ 目录下</p>
@@ -113,7 +113,7 @@ huggingface-cli download Mungert/gemma-3-1b-it-gguf google_gemma-3-1b-it-q4_k.gg
 ./build/bin/llama-cli -m ./models/google_gemma-3-1b-it-q4_k.gguf
 </code></pre>
 
-<p><img src="images/RunningLLM0.png" alt="运行模型" style="max-width: 80%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><img src="images/RunningLLM0.png" alt="运行模型" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <p>之后正常对话即可</p>
 
@@ -133,7 +133,7 @@ gemma-3-4b-it-q4_k_s.gguf<br>
 google_gemma-3-4b-it-mmproj-q8.gguf<br>
 下载后使用 ssh 传输到手机的 llama.cpp/models/ 目录下</p>
 
-<p><img src="images/normal_and_mmproj.png" alt="模型文件" style="max-width: 80%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><img src="images/normal_and_mmproj.png" alt="模型文件" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <p>也可以使用 huggingface-cli 下载模型：<br>
 下载到 手机的 llama.cpp/models/ 目录下，</p>
@@ -159,7 +159,7 @@ cd llama.cpp # 进入 llama.cpp 目录
 <p>输入图片，路径最好是termux下的绝对路径，</p>
 <pre><code class="language-bash">/image /data/data/com.termux/files/home/llama.cpp/media/test001.png</code></pre>
 
-<p><img src="images/mmproj_test0.png" alt="模型测试" style="max-width: 80%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><img src="images/mmproj_test0.png" alt="模型测试" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <p>测试结果：可以成功识别，但是图片编码和解码非常慢<br>
 Image encoded in 80559 ms<br>
