@@ -1,4 +1,30 @@
+// 在script.js顶部定义一个全局版本号
+const SITE_VERSION = "1.0.2"; // 每次内容更新时手动增加版本号
+
+// 添加一个辅助函数来为URL添加版本号
+function addVersionToUrl(url) {
+    if (!url || url.startsWith('#') || url === '') return url;
+    return url + (url.includes('?') ? '&' : '?') + 'v=' + SITE_VERSION;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    // 定义一个版本号，每次内容更新时手动修改
+    const currentVersion = SITE_VERSION;
+    
+    // 检查本地存储的版本
+    const storedVersion = localStorage.getItem('siteVersion');
+    
+    if (storedVersion !== currentVersion) {
+        // 版本不同，清除缓存并更新版本
+        localStorage.setItem('siteVersion', currentVersion);
+        
+        // 强制刷新页面以清除缓存
+        if (storedVersion) {
+            alert('网站内容已更新，正在加载最新版本...');
+            window.location.reload(true);
+        }
+    }
+
     // 页面内容和目录结构
     const pages = {
         'home': {
@@ -108,7 +134,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const page = pages[pageName];
         if (!page) return;
 
-        fetch(page.path)
+        // 使用版本号来避免缓存问题
+        const pageUrl = addVersionToUrl(page.path);
+
+        // 添加缓存控制头
+        const fetchOptions = {
+            cache: 'no-store',
+            headers: {
+                'Pragma': 'no-cache',
+                'Cache-Control': 'no-cache'
+            }
+        };
+
+        fetch(pageUrl, fetchOptions)
             .then(response => response.text())
             .then(html => {
                 document.getElementById('content-container').innerHTML = html;
@@ -139,8 +177,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // 如果URL中没有页面信息，更新URL
                 const urlParams = new URLSearchParams(window.location.search);
+                // 更新URL时也使用相同的版本号
                 if (urlParams.get('page') !== pageName) {
-                    history.pushState({}, '', `?page=${pageName}`);
+                    history.pushState({}, '', `?page=${pageName}&v=${SITE_VERSION}`);
                 }
             })
             .catch(error => {
@@ -153,6 +192,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function enhanceImages() {
         const images = document.querySelectorAll('#content-container img');
         images.forEach(img => {
+            // 为图片src添加版本号
+            if (img.src && !img.src.includes('v=')) {
+                img.src = addVersionToUrl(img.src);
+            }
+            
             // 添加加载效果
             img.onload = function() {
                 this.classList.add('loaded');
@@ -268,6 +312,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (link.getAttribute('data-event-set')) return;
             
             link.setAttribute('data-event-set', 'true');
+        });
+
+        // 处理普通链接
+        const normalLinks = document.querySelectorAll('#content-container a:not(.page-link)');
+        normalLinks.forEach(link => {
+            if (!link.href || link.href.startsWith('#') || link.href === '') return;
+            if (!link.href.includes('v=')) {
+                link.href = addVersionToUrl(link.href);
+            }
         });
     }
     
