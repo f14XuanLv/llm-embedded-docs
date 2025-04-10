@@ -119,6 +119,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 美化代码块
                 enhanceCodeBlocks();
 
+                // 增强表格，添加横向滚动
+                enhanceTables();
+
                 // 在loadPage函数中enhanceCodeBlocks()之后调用
                 wrapSections();
                 
@@ -209,6 +212,25 @@ document.addEventListener('DOMContentLoaded', () => {
             // 将原代码块替换为我们的增强版
             container.appendChild(codeContent);
             pre.parentNode.replaceChild(container, pre);
+        });
+    }
+
+    function enhanceTables() {
+        const tables = document.querySelectorAll('#content-container table');
+        
+        tables.forEach(table => {
+            // 检查表格是否已被包装
+            if (table.parentElement.classList.contains('table-container')) {
+                return;
+            }
+            
+            // 创建表格容器
+            const container = document.createElement('div');
+            container.className = 'table-container';
+            
+            // 将表格包装在容器中
+            table.parentNode.insertBefore(container, table);
+            container.appendChild(table);
         });
     }
 
