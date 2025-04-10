@@ -1,0 +1,530 @@
+/* 主色调定义 */
+:root {
+    --milk-brown: #d4b59e;    /* 奶褐色 */
+    --orange-white: #ffe9d0;  /* 橙白色 */
+    --milk-white: #F5F4ED;    /* 奶白色 */
+    --dark-brown: #a68267;    /* 深奶褐色，用于文字 */
+    --darker-brown: #aa876c;    /* 更深奶褐色 */
+    --highlight: #ff9a3c;     /* 高亮色（橙色） */
+    --claude-orange: #c96442;
+    --code-bg: #f6f0eb;       /* 淡米色代码块背景 */
+    --code-text: #a68267;     /* 褐色代码文本 */
+    --code-container-bg: #e6ded7; /* 浅奶咖色代码容器背景 */
+    --copy-btn-bg: #d4b59e;   /* 奶褐色复制按钮 */
+    --copy-btn-hover: #c96442; /* 橙色调按钮悬停色 */
+    --copy-btn-active: #c79e7b; /* 成功状态但调淡 */
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #FAF9F5;
+}
+
+.container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* 副标题样式 - 匹配网站现有风格 */
+.model-subtitle {
+    font-size: 1.2rem;
+    color: #a68267;  /* 使用深奶褐色 */
+    font-weight: normal;
+}
+
+/* 侧边栏样式 */
+.sidebar {
+    width: 280px;
+    background-color: #F5F4ED;
+    padding: 20px 0;
+    position: fixed;
+    height: 100vh;
+    overflow-y: auto;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-header {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-header h2 {
+    color: #333;
+    font-size: 1.5rem;
+}
+
+/* 目录样式 */
+.toc {
+    padding: 20px;
+}
+
+.toc-item {
+    margin-bottom: 10px;
+    list-style: none;
+}
+
+.toc-link {
+    display: block;
+    padding: 8px 10px;
+    color: #555;
+    text-decoration: none;
+    border-radius: 5px;
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.toc-link:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #222;
+}
+
+.toc-link.active {
+    background-color: var(--highlight);
+    color: white;
+}
+
+/* 内容区样式 */
+.content {
+    flex: 1;
+    padding: 30px;
+    margin-left: 280px;
+    background-color: #FAF9F5;
+    min-height: 100vh;
+}
+
+#content-container {
+    max-width: 900px;
+    margin: 0 auto;
+    background-color: var(--milk-white);
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 3px 10px rgba(166, 130, 103, 0.15); /* 棕色调阴影 */
+}
+
+/* 内容样式 */
+#content-container h1 {
+    color: var(--dark-brown);
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--milk-brown);
+}
+
+/* 为每个二级标题区域添加微妙的背景色 */
+#content-container h2 {
+    color: var(--dark-brown);
+    margin-left: -15px;
+    margin-right: -15px;
+    padding-left: 15px;
+}
+
+/* 为每个主要区块添加卡片式效果 */
+.section-container {
+    border: 1px solid rgba(166, 130, 103, 0.2);
+    border-radius: 10px;
+    margin-top: 30px; /* 适中的顶部间距 */
+    margin-bottom: 125px; /* 增加底部间距，让下一个卡片远离当前卡片 */
+    padding: 25px;
+    background-color: #fdfcf9;
+    box-shadow: 0 3px 8px rgba(166, 130, 103, 0.1);
+    position: relative;
+}
+
+/* 最后一个卡片减少底部间距 */
+#content-container > .section-container:last-child {
+    margin-bottom: 40px;
+}
+
+/* 让卡片中的二级标题更加突出 */
+.section-container h2 {
+    margin-top: 0 !important;
+    padding-bottom: 15px;
+    position: relative;
+    margin-bottom: 25px;
+    border-bottom: none; /* 移除原来的边框 */
+}
+
+/* 添加更短的虚线 */
+.section-container h2::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 2%; /* 从左边10%开始 */
+    right: 2%; /* 到右边10%结束 */
+    width: 96%; /* 宽度为总宽度的90% */
+    border-bottom: 3px dashed rgba(166, 130, 103, 0.5);
+}
+
+/* 三级标题优化 - 更大间距 */
+#content-container h3 {
+    color: var(--dark-brown);
+    margin-top: 50px; /* 适中的顶部间距 */
+    margin-bottom: 25px; /* 增加底部间距 */
+    padding-bottom: 10px;
+    border-bottom: 2px dotted rgba(166, 130, 103, 0.4);
+    font-size: 1.3rem;
+    position: relative;
+}
+
+#content-container h4 {
+    color: var(--dark-brown);
+    margin-top: 15px;
+    margin-bottom: 8px;
+}
+
+#content-container p {
+    margin-bottom: 15px;
+}
+
+#content-container ul, #content-container ol {
+    margin-bottom: 15px;
+    padding-left: 20px;
+}
+
+#content-container li {
+    margin-bottom: 5px;
+}
+
+/* 代码容器样式 */
+.code-container {
+    position: relative;
+    background-color: var(--code-container-bg);
+    border-radius: 8px;
+    margin: 20px 0;
+    padding-top: 40px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 5px 12px rgba(0, 0, 0, 0.10);
+}
+
+.code-language {
+    position: absolute;
+    top: 10px;
+    left: 15px;
+    font-size: 0.90rem;
+    color: var(--dark-brown);
+    z-index: 2;
+}
+
+.copy-button {
+    position: absolute;
+    top: 6px;
+    right: 7px;
+    background-color: var(--copy-btn-bg);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.copy-button:hover {
+    background-color: var(--copy-btn-hover);
+}
+
+.copy-button.copied {
+    background-color: var(--copy-btn-active);
+}
+
+.code-content {
+    background-color: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 0 0 8px 8px; /* 只在左下和右下角应用8px的圆角 */
+    padding: 15px;
+    overflow-x: auto;
+    font-family: 'Fira Code', 'JetBrains Mono', 'Source Code Pro', 'Consolas', 'Monaco', 'Menlo', monospace;
+    font-size: 1.10rem;
+    line-height: 1.5;
+    max-height: 500px;
+    overflow-y: auto;
+    margin: 0;
+    white-space: pre;
+}
+
+/* 旧样式覆盖 */
+#content-container pre {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    overflow: visible;
+    margin: 0;
+    max-width: 100%;
+}
+
+#content-container code {
+    font-family: 'Courier New', Courier, monospace;
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    color: inherit;
+}
+
+#content-container a {
+    color: var(--highlight);
+    text-decoration: none;
+}
+
+#content-container a:hover {
+    text-decoration: underline;
+}
+
+#content-container img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 15px 0;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* 表格样式 */
+#content-container table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+#content-container th, #content-container td {
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+}
+
+#content-container th {
+    background-color: var(--milk-brown);
+    color: white;
+}
+
+#content-container tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+        max-height: 300px;
+    }
+    
+    .content {
+        margin-left: 0;
+        padding: 20px;
+    }
+    
+    #content-container {
+        padding: 20px;
+    }
+    
+    .code-container {
+        margin: 15px 0;
+    }
+}
+
+/* 增强目录层级样式 - 适应浅色背景 */
+.heading-list {
+    margin-top: 8px;
+    padding-left: 20px;
+    border-left: 2px solid rgba(0, 0, 0, 0.1);
+    margin-left: 10px;
+}
+
+.heading-list .toc-link {
+    font-size: 0.95rem;
+    color: #555;
+    padding: 8px 10px;
+    margin-bottom: 5px;
+    background-color: rgba(0, 0, 0, 0.03);
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.heading-list .toc-link:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+    color: #222;
+}
+
+.sub-toc {
+    margin-top: 5px;
+    padding-left: 15px;
+    border-left: 1px solid rgba(0, 0, 0, 0.08);
+    margin-left: 10px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, opacity 0.2s ease;
+    display: block !important;
+    opacity: 0;
+}
+
+.sub-toc.expanded {
+    max-height: 500px;
+    transition: max-height 0.5s ease-in, opacity 0.3s ease;
+    opacity: 1;
+}
+
+.sub-toc .toc-link {
+    font-size: 0.9rem;
+    color: #666;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    background-color: transparent;
+}
+
+.sub-toc .toc-link:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+    color: #333;
+}
+
+/* 自定义列表项标记 */
+.sub-toc-item {
+    position: relative;
+    list-style: none;
+}
+
+.sub-toc-item::before {
+    content: "•";
+    color: rgba(166, 130, 103, 0.6);
+    position: absolute;
+    left: -10px;
+    top: 6px;
+    font-size: 0.8rem;
+}
+
+/* 活跃状态增强 */
+.toc-link.active {
+    background-color: var(--darker-brown) !important;
+    color: white !important;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 悬停效果增强 */
+.toc-link:hover {
+    transform: translateX(2px);
+    transition: all 0.2s ease;
+}
+
+/* 页面链接样式强化 */
+.page-links > .toc-item > .toc-link {
+    font-weight: bold;
+    font-size: 1.05rem;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    background-color: rgba(0, 0, 0, 0.03);
+    color: #444;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    transition: all 0.2s ease;
+}
+
+.page-links > .toc-item > .toc-link:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+    color: #222;
+}
+
+/* 当前活跃的页面链接 */
+.page-links > .toc-item > .toc-link.active {
+    background-color: var(--highlight);
+    color: white;
+}
+
+/* 当前页面的标题列表效果 */
+.toc-item:has(.heading-list) > .toc-link {
+    position: relative;
+}
+
+.toc-item:has(.heading-list) > .toc-link::after {
+    content: "▼";
+    font-size: 0.8rem;
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.6;
+    color: #555;
+}
+
+/* 为二级标题添加更好的样式 */
+.heading-toc-link {
+    display: flex;
+    align-items: center;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+}
+
+.heading-toc-link:hover {
+    border-left-color: rgba(166, 130, 103, 0.4);
+}
+
+/* 样式化三级标题链接 */
+.sub-toc-link {
+    font-weight: normal;
+    transition: all 0.2s ease;
+    opacity: 0.9;
+}
+
+.sub-toc-link:hover {
+    opacity: 1;
+}
+
+/* 美化侧边栏滚动条 */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+}
+
+/* 针对代码相关的滚动条美化 */
+.code-content::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.code-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.code-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.code-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* 行内代码样式 */
+p code, li code {
+    background-color: rgba(0, 0, 0, 0.05);
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.9em;
+    color: #d14;
+}
