@@ -1,5 +1,5 @@
 // 在script.js顶部定义一个全局版本号
-const SITE_VERSION = "1.0.2"; // 每次内容更新时手动增加版本号
+const SITE_VERSION = "1.0.3"; // 每次内容更新时手动增加版本号
 
 // 添加一个辅助函数来为URL添加版本号
 function addVersionToUrl(url) {

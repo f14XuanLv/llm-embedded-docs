@@ -1,13 +1,225 @@
 <h1>在香橙派上部署多模态llm与模型转换&推理优化</h1>
 
 <h2>部署纯文本llm</h2>
-<p>此部分内容待补充</p>
+
+<h3>测试香橙派</h3>
+
+<p>按照用户手册逐步测试即可</p>
+
+<h3>克隆并编译llama.cpp</h3>
+
+<ul>
+    <li><strong>作用</strong>：<code>llama.cpp</code> 是一个纯 C/C++ 实现的推理引擎，专门为在本地设备（如香橙派这类资源受限的硬件）上高效运行大语言模型（如 LLaMA、Gemma 等）而设计。</li>
+    <li><strong>场景</strong>：
+    通过编译 <code>llama.cpp</code>，获得了 <code>llama-cli</code> 可执行文件，它可以直接加载并运行 GGUF 格式的量化模型（如 <code>google_gemma-3-1b-it-q4_k.gguf</code>），无需依赖复杂的 Python 环境或 GPU。</li>
+</ul>
+
+<h4>克隆llama.cpp</h4>
+
+<pre><code class="language-bash">
+git clone https://github.com/ggml-org/llama.cpp
+cd llama.cpp
+</code></pre>
+
+<p>一般情况下如果要从Github上克隆代码，香橙派需要使用网络代理，
+我选择在电脑上下载，然后通过WinSCP将文件传输到香橙派上。下面的模型文件同理。</p>
+
+<h4>编译llama.cpp</h4>
+
+<pre><code class="language-bash">
+mkdir build
+cd build
+cmake ..
+make -j8 # 使用8个线程编译
+</code></pre>
+
+<h3>下载模型</h3>
+
+<p>推荐直接去
+<a href="https://huggingface.co/Mungert/gemma-3-1b-it-gguf/tree/main" target="_blank">https://huggingface.co/Mungert/gemma-3-1b-it-gguf/tree/main</a>
+下载</p>
+
+<p><img src="images/Download_gemma-3-1b-it-gguf.png" alt="下载模型" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+
+<p>google_gemma-3-1b-it-q4_k.gguf<br>
+然后通过WinSCP传输，将其放置在 llama.cpp/models/ 目录下</p>
+
+<h3>运行模型</h3>
+
+<pre><code class="language-bash">
+./build/bin/llama-cli -m ./models/google_gemma-3-1b-it-q4_k.gguf
+</code></pre>
+
+<p><img src="emptyPicture" alt="留空后续填充" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <h2>部署图生文llm</h2>
-<p>此部分内容待补充</p>
+
+<p>Gemma3 支持图生文的最小的模型是 Gemma3-4B，以此为例</p>
+
+<h3>测试香橙派上运行Gemma3-4B多模态的效果</h3>
+
+<h4>首先下载 Gemma3-4B的模型文件</h4>
+
+<p>进入 <a href="https://huggingface.co/Mungert/gemma-3-4b-it-gguf/tree/main" target="_blank">https://huggingface.co/Mungert/gemma-3-4b-it-gguf/tree/main</a></p>
+
+<p>选择两个 Gemma3-4B 中轻量的文本模型和图像嵌入模型，<br>
+分别是：<br>
+gemma-3-4b-it-q4_k_s.gguf<br>
+google_gemma-3-4b-it-mmproj-q8.gguf<br>
+下载后使用 WinSCP传输到香橙派的 llama.cpp/models/ 目录下</p>
+
+<p><img src="images/normal_and_mmproj.png" alt="模型文件" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+
+<h4>然后运行模型</h4>
+
+<pre><code class="language-bash">
+cd llama.cpp # 进入 llama.cpp 目录
+
+./build/bin/llama-gemma3-cli \
+    -m models/google_gemma-3-4b-it-q4_k_s.gguf \
+    --mmproj models/google_gemma-3-4b-it-mmproj-q8.gguf
+</code></pre>
+
+<p>运行成功，提示输入图片的指令</p>
+<p><img src="images/image_input_tips.png" alt="输入图片提示" style="max-width: 80%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+
+<p>在特定目录准备一张小图片，<br>
+我将测试图放在了 /llama.cpp/image/orangepi_test.jpg</p>
+
+<p>这是一张很小的图片，仅48*48</p>
+
+<p>输入图片，相对路径或绝对路径</p>
+
+<pre><code class="language-bash">/image ./image/orangepi_test.jpg</code></pre>
+
+<p>编码图片大约要5-6分钟</p>
+
+<p>解码图片大约要1分钟</p>
+
+<p>速度显然过慢</p>
 
 <h2>模型转换&推理优化</h2>
-<p>此部分内容待补充</p>
+
+<p>香橙派搭载华为昇腾 NPU，可对模型针对该芯片进行推理优化。</p>
+
+<p><a href="https://huggingface.co/google/gemma-3-4b-it-qat-int4-unquantized" target="_blank">https://huggingface.co/google/gemma-3-4b-it-qat-int4-unquantized</a></p>
+
+<p>选择最新的量化训练过的模型进行转换</p>
+
+<h3>模型转换流程</h3>
+
+<h4>原始模型 → ONNX</h4>
+
+<p><strong>工具</strong>：使用 Hugging Face 的 <code>transformers</code> + <code>torch.onnx</code> 导出 ONNX。</p>
+
+<p><a href="https://huggingface.co/docs/transformers/serialization" target="_blank">ONNX</a></p>
+
+<h4>ONNX → 昇腾 OM 模型</h4>
+
+<p><strong>工具</strong>：使用华为的 <strong>ATC（Ascend Tensor Compiler）</strong> 工具转换。</p>
+
+<p><a href="https://www.hiascend.com/document" target="_blank">昇腾文档-昇腾社区</a></p>
+
+<h4>部署方案</h4>
+
+<h5>(1) 直接调用 OM 模型</h5>
+<ul>
+    <li>使用昇腾的 <strong>MindX SDK</strong> 或 <strong>AscendCL</strong> 接口加载 OM 模型：</li>
+</ul>
+
+<h5>(2) 使用 MindSpore Lite</h5>
+<ul>
+    <li>将 OM 模型转换为 MindSpore Lite 格式，适用于边缘设备：</li>
+</ul>
+
+<h2>外设配置</h2>
+
+<h3>摄像头使用</h3>
+<p>连接摄像头后按照用户手册检查摄像头是否被检测到</p>
+
+<p>编写python脚本使用摄像头拍照</p>
+
+<pre><code class="language-python">
+import os
+import time
+import subprocess
+
+# 配置参数
+CAMERA_DEVICE = "/dev/video0"
+OUTPUT_DIR = "captured_images"
+MODEL_PATH = "your_model.gguf"  # 替换为你的 .gguf 模型路径
+MODEL_COMMAND = f"./llama.cpp/main -m {MODEL_PATH} --prompt"  # 替换为实际模型命令
+
+# 创建保存目录
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+i=0
+while i<5:
+    # 生成文件名（时间戳）
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    image_path = os.path.join(OUTPUT_DIR, f"image_{timestamp}.jpg")
+
+    # 拍照（使用 fswebcam）
+    subprocess.run([
+        "fswebcam",
+        "-d", CAMERA_DEVICE,
+        "-r", "1280x720",
+        "--no-banner",
+        image_path
+    ])
+
+    print(f"已拍照：{image_path}")
+
+    time.sleep(10)
+    i=i+1
+</code></pre>
+
+<h3>麦克风和耳机的使用</h3>
+<p>麦克风可以使用摄像头中内置的。耳机需要使用USB接口的，否则要用外置声卡转接头进行一次转接。
+吉选摄像头中自带的麦克风仅支持单通道音频录制，命令中要使用 -c 参数指定。</p>
+
+<h4>音频设备管理</h4>
+<pre><code class="language-bash">
+# 查看麦克风设备
+arecord -l
+
+# 查看音频输出设备
+aplay -l
+
+# 录制10秒音频 (单声道, CD质量)
+arecord -D hw:0,0 -f cd -c 1 -d 10 ./testaudio.wav
+
+# 播放录制的音频
+aplay ./testaudio.wav
+</code></pre>
+
+<p>使用python脚本进行语音识别。要先安装</p>
+
+<pre><code class="language-python">
+import pyaudio
+import vosk
+import json
+
+# 初始化Vosk模型
+model_path = "/home/HwHiAiUser/LLM/vosk/vosk-model-small-cn-0.22/"  # 需提前下载中文模型
+model = vosk.Model(model_path)
+recognizer = vosk.KaldiRecognizer(model, 16000)
+
+# 配置麦克风
+p = pyaudio.PyAudio()
+stream = p.open(
+    format=pyaudio.paInt16,
+    channels=1,
+    rate=16000,
+    input=True,
+    frames_per_buffer=4096
+)
+
+print("开始监听... (按 Ctrl+C 停止)")
+while True:
+    data = stream.read(4096)
+    if recognizer.AcceptWaveform(data):
+        result = json.loads(recognizer.Result())
+        print("识别结果:", result.get("text", ""))
+</code></pre>
 
 <h2>附录</h2>
-<p>此部分内容待补充</p>
