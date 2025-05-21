@@ -1,6 +1,6 @@
 <h1>在安卓手机上部署多模态llm与模型转换&推理优化</h1>
 
-<h2>部署纯文本llm</h2>
+<h2>GGUF部署纯文本llm</h2>
 
 <p class="model-subtitle">以gemma-3-1b-it-q4_k.gguf为例</p>
 
@@ -117,7 +117,7 @@ huggingface-cli download Mungert/gemma-3-1b-it-gguf google_gemma-3-1b-it-q4_k.gg
 
 <p>之后正常对话即可</p>
 
-<h2>部署图生文llm</h2>
+<h2>GGUF部署图生文llm</h2>
 
 <p>Gemma3 支持图生文的最小的模型是 Gemma3-4B，以此为例</p>
 
@@ -165,24 +165,336 @@ cd llama.cpp # 进入 llama.cpp 目录
 Image encoded in 80559 ms<br>
 Image decoded in 18534 ms</p>
 
-<h2>模型转换&推理优化</h2>
+<h2>基于 ONNX Runtime 的跨平台部署探索</h2>
 
-<h3>demo</h3>
+<p>ONNX (Open Neural Network Exchange) 是一种开放的模型表示格式，旨在促进不同深度学习框架之间的互操作性。ONNX Runtime (ORT) 则是一个跨平台的高性能推理引擎，支持多种硬件加速器。本节将详细记录将 Gemma 3 文本模型转换为 ONNX 格式并进行验证的过程。</p>
 
-<p>由于我的手机芯片是高通骁龙870，</p>
+<h3>ONNX 格式的重要性与转换挑战</h3> <!-- 原 3.2.1 -->
+<p>ONNX 作为一种中间表示，为模型从训练框架（如 PyTorch）迁移到不同推理引擎和硬件平台提供了桥梁。然而，将 Gemma 3 这类复杂的 Transformer 模型转换为 ONNX 并非易事。</p>
+<p><strong>传统 <code>torch.onnx.export</code> 的局限性：</strong>对于 Gemma 3 这类复杂、包含自定义操作或动态特性的模型，常规的 <code>torch.onnx.export</code> 方法是行不通的。原因包括动态计算图与静态图的转换困难、自定义算子/模块（如 RoPE, GQA, RMSNorm）缺乏直接ONNX对应、以及KV缓存处理的复杂性。</p>
 
-<p>高通官方的神经网络推理框架提供了SNPE (Snapdragon Neural Processing Engine) ，专门为骁龙芯片优化，能够充分利用870的AI引擎、GPU和CPU。</p>
+<h3><code>builder_simplified.py</code>：借鉴 onnxruntime-genai 的 ONNX 构建</h3> <!-- 原 3.2.2 -->
+<p>鉴于传统方法的局限性，本项目采用了一种更深入、更可控的方式来将 Gemma 3 文本模型转换为 ONNX 格式。这一过程借鉴并学习了微软 <code>onnxruntime-genai</code> 项目中的 <code>builder.py</code> 脚本，该脚本并非依赖 PyTorch 的自动追踪，而是基于对模型架构的深刻理解，使用 <code>onnx.helper</code> API 以编程方式、显式地构建 ONNX 计算图。</p>
 
-<p>所以预计技术路线如下：<br>
-Hugging Face (PyTorch兼容的 safetensors 格式) → ONNX → SNPE DLC → 量化DLC → 手机部署</p>
-
+<h4>环境准备与模型下载</h4>
+<p>在进行模型转换之前，首先需要搭建相应的 Python 环境并下载原始的 Gemma 3 模型文件。</p>
+<ol>
+    <li>
+        <p><strong>创建 Conda 虚拟环境并安装依赖：</strong></p>
 <pre><code class="language-bash">
+conda create -n gemma_onnx python=3.10
+conda activate gemma_onnx
+
+# 安装核心依赖
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple numpy torch transformers onnx onnxruntime accelerate
+
+# 安装 Hugging Face Hub 工具 (用于模型下载)
+pip install huggingface_hub
+
+# (可选) 登录 Hugging Face CLI
 huggingface-cli login
-
-python -c "from huggingface_hub import snapshot_download; snapshot_download('google/gemma-3-4b-it', local_dir='./gemma-3-4b-it')"
 </code></pre>
+    </li>
+    <li>
+        <p><strong>下载 Gemma 3 1B 指令微调模型：</strong></p>
+        <p>本项目选择转换 <code>gemma-3-1b-it</code> 模型。其原始 PyTorch 模型文件 (包含 <code>config.json</code> 和权重文件) 通过 Hugging Face CLI 下载：</p>
+<pre><code class="language-bash">
+# 创建工作目录 (例如 gemma3-1b-project)
+mkdir gemma3-1b-project
+cd gemma3-1b-project
 
-<p>后续内容待补充</p>
+# 下载模型文件到 ./gemma-3-1b-it 目录
+huggingface-cli download google/gemma-3-1b-it --repo-type model --local-dir ./gemma-3-1b-it
+</code></pre>
+        <p>下载完成后，<code>./gemma-3-1b-it</code> 目录将包含模型运行所需的全部文件，特别是定义了模型架构参数（如 <code>hidden_size: 1152</code>, <code>num_attention_heads: 4</code>, <code>num_key_value_heads: 1</code>, <code>num_hidden_layers: 26</code>, <code>vocab_size: 262144</code>）的 <code>config.json</code> 文件。</p>
+    </li>
+</ol>
+
+<h4>获取并适配转换脚本</h4>
+<ol>
+    <li>
+        <p><strong>获取 <code>builder.py</code>：</strong></p>
+        <p>从 <code>microsoft/onnxruntime-genai</code> GitHub 仓库 (<a href="https://github.com/microsoft/onnxruntime-genai" target="_blank">https://github.com/microsoft/onnxruntime-genai</a>) 中获取 <code>builder.py</code> 文件 (具体路径是 <code>/src/python/py/models/builder.py</code>)。根据项目记录，选择一个修复了 Gemma 3 相关导出 bug 的版本（例如，2025年4月之后的主分支或恰好大于 0.7.1 的 Release 版本）非常重要。</p>
+        <p><em>(注：根据项目实践，2025年5月12日时，onnxruntime-genai 的主分支版本对 Gemma 3 的支持优于当时的0.7.1 Release。)</em></p>
+    </li>
+    <li>
+        <p><strong>简化与适配 (<code>builder_simplified.py</code>)：</strong></p>
+        <p>原始的 <code>builder.py</code> 支持多种模型架构。为聚焦于本项目的 Gemma 3 模型，我从原始 <code>builder.py</code> 中提取了与 Gemma 系列模型（特别是 Gemma 3 的文本模型架构，如 <code>Gemma3Model</code> 类及其依赖）相关的核心代码，移除了其他不相关的模型处理逻辑，形成了一个更精简、更易于理解和调试的 <code>builder_simplified.py</code> 脚本。这个简化脚本保留了手动构建 ONNX 图、处理 Gemma 3 特有结构（如 QK-Norm, RoPE, GQA-ready mask）、以及生成 <code>genai_config.json</code> 的核心功能。</p>
+    </li>
+</ol>
+
+<h4>执行 ONNX 转换</h4>
+<p>使用准备好的 <code>builder_simplified.py</code> 脚本和下载的 <code>gemma-3-1b-it</code> 模型文件，执行以下命令进行 ONNX 转换：</p>
+<pre><code class="language-bash">
+python builder_simplified.py \
+    -i ./gemma-3-1b-it \
+    -o ./gemma-3-1b-it-onnx-cpu-fp32-test \
+    -p fp32 \
+    -e cpu
+</code></pre>
+<p>参数说明：</p>
+<ul>
+    <li><code>-i ./gemma-3-1b-it</code>: 指定输入的 Hugging Face 模型目录。</li>
+    <li><code>-o ./gemma-3-1b-it-onnx-cpu-fp32-test</code>: 指定输出 ONNX 模型及相关文件的目录。</li>
+    <li><code>-p fp32</code>: 指定转换后的模型精度为 FP32。</li>
+    <li><code>-e cpu</code>: 指定目标执行提供程序为 CPU (这会影响某些优化选项的默认值，例如 GroupQueryAttention 是否启用)。</li>
+</ul>
+
+<p><img src="images/gemma-3-1b-it-to-onnx.png" alt="builder_simplified.py 转换 gemma-3-1b 为 onnx 演示" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+
+<p>如运行截图所示，<code>builder_simplified.py</code> 脚本会逐层读取原始模型的权重 (<code>"Reading embedding layer"</code>, <code>"Reading decoder layer 0"</code> ... <code>"Reading decoder layer 25"</code>, <code>"Reading final norm"</code>, <code>"Reading LM head"</code>)。脚本还会根据模型配置和目标执行提供程序自动进行一些优化判断，例如日志中明确提示 <code>"GroupQueryAttention (GQA) is used in this model"</code>。转换完成后，会在指定的输出目录 (<code>./gemma-3-1b-it-onnx-cpu-fp32-test</code>) 中生成以下关键文件：</p>
+<ul>
+    <li><code>model.onnx</code>: 核心的 ONNX 模型文件。</li>
+    <li><code>model.onnx.data</code>: 如果模型较大，部分权重会存储在这个外部数据文件中。</li>
+    <li><code>genai_config.json</code>: 包含模型结构参数、输入输出节点名等元信息，供 ONNX Runtime GenAI 推理使用。</li>
+    <li>Tokenizer 相关文件 (如 <code>tokenizer.model</code>, <code>tokenizer_config.json</code>, <code>special_tokens_map.json</code>): 从原始模型目录复制而来，用于后续推理时的文本编码解码。</li>
+</ul>
+
+<h4>核心工作方式对比</h4>
+<p>与依赖 PyTorch 自动追踪的 <code>torch.onnx.export</code> 不同, <code>builder_simplified.py</code> 的核心思想是基于对模型架构的深刻理解, 使用 <code>onnx.helper</code> API 以编程方式、显式地构建 ONNX 计算图的每一个节点、张量和属性。这种方式的优点是可以精确控制生成的 ONNX 图, 处理复杂结构和自定义行为, 并可能集成 ONNX Runtime 特有的优化算子。缺点是代码量较大, 开发调试耗时, 且要求开发者对模型原始实现和 ONNX 规范都有极深的理解。</p>
+
+<h3>Netron 可视化分析 (<code>gemma-3-1b-onnx-gqa</code>)</h3> <!-- 原 3.2.3 -->
+<p>为深入理解 <code>builder_simplified.py</code> 脚本生成的 <code>gemma-3-1b-onnx-gqa.onnx</code> 模型的内部结构，我们借助 Netron 可视化工具对其进行了详细分析。该模型是基于原始 PyTorch <code>gemma-3-1b-it</code> 模型（其 <code>config.json</code> 文件定义了 <code>hidden_size</code> 为 1152，<code>num_attention_heads</code> 为 4，<code>num_key_value_heads</code> 为 1，<code>num_hidden_layers</code> 为 26，<code>vocab_size</code> 为 262144）转换而来。</p>
+
+<h4>模型头部：输入处理与嵌入</h4>
+<p>在进入核心的 Transformer Decoder Layer 之前，模型首先对输入进行一系列预处理操作：</p>
+<p><img src="images/gemma-3-1b-it-onnx-gqa-head-view1.png" alt="ONNX模型头部图1：Input_ids到Embedding和Scaling" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><img src="images/gemma-3-1b-it-onnx-gqa-head-view2.png" alt="ONNX模型头部图2：Attention_mask和Position_ids处理" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<ul>
+    <li><strong>初始输入：</strong> 模型接收 <code>input_ids</code> (原始文本token ID序列)、<code>attention_mask</code> (指示哪些token需要被关注) 和 <code>position_ids</code> (每个token的位置信息) 作为主要顶层输入。</li>
+    <li><strong>Token嵌入与缩放：</strong>
+        <ul>
+            <li><code>input_ids</code> 通过一个 <code>Gather</code> 节点从一个大型的嵌入权重矩阵（Initializer，即 <code>model.embed_tokens.weight</code>）中查找对应的词嵌入向量。</li>
+            <li>紧接着，查找到的词嵌入会经过一个 <code>Mul</code> 节点进行缩放。根据 Gemma 模型的特性以及 <code>builder_simplified.py</code> 中的实现（<code>self.embed_attrs['scale'] = np.round(np.sqrt(self.hidden_size), decimals=2)</code>），此处的缩放因子为 <code>sqrt(hidden_size)</code>，即 <code>sqrt(1152)</code>。</li>
+        </ul>
+    </li>
+    <li><strong>Attention Mask 与位置信息处理 (针对 GroupQueryAttention 的特定输入)：</strong>
+        <ul>
+            <li><code>position_ids</code> 张量被直接引入，并将连接到后续每一层中的 <code>RotaryEmbedding</code> 节点，为 Query 和 Key 向量提供精确的位置信息。</li>
+            <li><code>attention_mask</code> 则经过一系列精心设计的操作（如图中所示的 <code>ReduceSum</code>, <code>Sub</code>, <code>Shape</code>, <code>Gather</code>, <code>Cast</code> 等节点）来生成两个关键的 <code>int32</code> 张量：<code>seqlens_k</code> (每个序列中 Key 的有效长度) 和 <code>total_sequence_length</code>。这些张量是 <code>onnxruntime-genai</code> 框架为 <code>com.microsoft.GroupQueryAttention</code> 融合算子准备的特定输入，用于高效地管理注意力计算的范围和 KV 缓存的动态。</li>
+        </ul>
+    </li>
+</ul>
+
+<h4>模型主体：Transformer Decoder Layers</h4>
+<p>经过上述预处理后，数据流进入核心的 Transformer 结构。</p>
+<p><img src="images/gemma-3-1b-it-onnx-gqa-global-thumbnail.png" alt="gemma-3-1b-onnx-gqa 整体结构Netron缩略图" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p>从<strong>全局缩略图</strong>可以清晰地看到，模型的主体由26层 Transformer Decoder Layer（在图中通常从上/左到下/右依次编号为 Layer 0 到 Layer 25）串行连接而成。数据流从模型头部的嵌入层开始，逐层通过这些 Decoder Layer，每一层都对隐藏状态进行细化和转换。</p>
+<p><img src="images/gemma-3-1b-it-onnx-gqa-partial-thumbnail.png" alt="ONNX模型局部缩略图：多个Decoder Layer连接" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><strong>局部缩略图</strong>进一步放大了几个连续 Decoder Layer 之间的连接细节。它清晰地展示了：</p>
+<ul>
+    <li>每一层都包含一个核心的 <code>GroupQueryAttention</code> 节点。</li>
+    <li><code>past_key_values.N.key</code> 和 <code>past_key_values.N.value</code>（代表来自前一轮推理步骤的缓存信息）作为输入传递给第 N 层的 <code>GroupQueryAttention</code> 节点。</li>
+    <li>每一层计算后，会输出新的 <code>present.N.key</code> 和 <code>present.N.value</code>，这些将作为下一轮推理时的 <code>past_key_values</code>。</li>
+    <li>隐藏状态（contextualized representations）在层与层之间顺序传递，经过每一层的自注意力计算和前馈网络处理。</li>
+</ul>
+<p><img src="images/gemma-3-1b-it-onnx-gqa-partial-view1.png" alt="ONNX模型单个Transformer Decoder Layer详细结构图1" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><img src="images/gemma-3-1b-it-onnx-gqa-partial-view2.png" alt="ONNX模型单个Transformer Decoder Layer详细结构图2" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p>深入到<strong>单个 Transformer Decoder Layer 的详细结构图 (如局部图1、局部图2所示)</strong>，我们可以辨认出其内部一致且复杂的组件构成，这与 <code>builder_simplified.py</code> 的构建逻辑（源自对 Gemma 3 模型 PyTorch 实现的精确映射）高度吻合：</p>
+<ol>
+    <li><strong>输入与层前注意力归一化 (Pre-Attention Layer Normalization):</strong>
+        每一层的输入（对于第0层，是经过缩放的词嵌入；对于后续层，是前一层的输出）首先会经过一个层归一化操作。在图中，这表现为 <code>SimplifiedLayerNormalization</code> 或 <code>SkipSimplifiedLayerNormalization</code> 节点（后者通常在其内部包含了残差连接的加法操作）。Gemma 3 采用 RMSNorm，这些 ONNX 算子是其高效实现。
+    </li>
+    <li><strong>自注意力子模块 (Self-Attention Sub-block):</strong>
+        <ul>
+            <li><strong>输入投影与QK-Norm:</strong> 归一化后的输入张量通过并行的 <code>MatMul</code> 和 <code>Reshape</code> 节点被投影，生成初步的 Query (Q), Key (K), 和 Value (V) 张量。紧接着，根据 Gemma 3 的架构特性，Q 和 K 张量会分别经过一次 <code>SimplifiedLayerNormalization</code> 进行 Query-Key Normalization (QK-Norm)，然后再通过 <code>Reshape</code> 调整形状以适应后续操作。</li>
+            <li><strong>旋转位置编码 (Rotary Position Embedding):</strong> 经过 QK-Norm 和 Reshape 的 Q 和 K 张量分别被送入独立的 <code>RotaryEmbedding</code> 节点。这些节点利用从模型头部传递过来的 <code>position_ids</code> 来为 Q 和 K 注入相对位置信息。</li>
+            <li><strong>分组查询注意力 (GroupQueryAttention):</strong> 经过 RoPE 处理的 Q、K 张量，以及原始的 V 张量，连同当前层的 <code>past_key_values</code> (如果存在)，以及从模型头部 <code>attention_mask</code> 处理得到的 <code>seqlens_k</code> 和 <code>total_sequence_length</code>，一同作为输入送给核心的 <code>com.microsoft.GroupQueryAttention</code> 节点。这是一个融合算子，高效地执行分组查询注意力计算。其属性会指明总注意力头数 (4个)、键值头数 (1个，表明是 MQA)、<code>head_size</code> (256)以及可能的缩放因子等。该节点输出注意力上下文向量和当前层的 <code>present_key</code> 及 <code>present_value</code>。</li>
+        </ul>
+    </li>
+    <li><strong>残差连接与层后注意力归一化 (Post-Attention Layer Normalization):</strong>
+        注意力子模块的输出（上下文向量）会通过一个残差连接（通常由 <code>SkipSimplifiedLayerNormalization</code> 节点内部的加法操作实现）与该注意力子模块的输入（即层前注意力归一化的输出）相加。其和再经过一次层归一化处理。
+    </li>
+    <li><strong>前馈网络子模块 (Feed-Forward Network / MLP Sub-block):</strong>
+        经过后注意力归一化的张量接着被送入 MLP 子模块。其结构与 Gemma 3 的 <code>gelu_pytorch_tanh</code> 激活的门控线性单元 (GLU) 设计一致：
+        <ul>
+            <li><strong>门控投影 (Gate Projection):</strong> 输入通过一个 <code>MatMul</code> 节点。</li>
+            <li><strong>激活函数:</strong> 上述输出经过一个 <code>FastGelu</code> 节点（这是 <code>gelu_pytorch_tanh</code> 在 ONNX 中的常见映射）。</li>
+            <li><strong>上投影 (Up Projection):</strong> MLP的输入同样经过另一个并行的 <code>MatMul</code> 节点。</li>
+            <li><strong>门控机制 (Gating):</strong> <code>FastGelu</code> 的输出与上投影的输出通过一个 <code>Mul</code> (逐元素乘法) 节点结合。</li>
+            <li><strong>下投影 (Down Projection):</strong> <code>Mul</code> 节点的输出再经过最后一个 <code>MatMul</code> 节点进行最终投影，得到 MLP 子模块的输出。</li>
+        </ul>
+    </li>
+    <li><strong>残差连接与层后MLP归一化 (Post-MLP Layer Normalization):</strong>
+        MLP 子模块的输出同样通过残差连接与其输入（即后注意力归一化的输出）相加，并进行该 Decoder Layer 的最后一次层归一化（通常是 <code>SkipSimplifiedLayerNormalization</code>）。该操作的输出即为当前 Transformer Decoder Layer 的最终输出，将作为下一层的输入或模型的最终隐藏状态。
+    </li>
+</ol>
+
+<h4>模型尾部：输出处理与Logits生成</h4>
+<p>经过全部26层 Transformer Decoder Layer 的复杂计算和信息传递后，模型进入最后的输出阶段，生成最终的预测 Logits。</p>
+<p><img src="images/gemma-3-1b-it-onnx-gqa-tail-view.png" alt="ONNX模型尾部图：Layer 25 GQA到Logits" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<ul>
+    <li><strong>最终层归一化：</strong> 第25层 (最后一层) MLP 的输出会经过模型中最后一次关键的层归一化操作（如图中 Layer 25 之后的 <code>SimplifiedLayerNormalization</code> 和 <code>SkipSimplifiedLayerNormalization</code> 所示）。这个节点的输出代表了整个 Transformer 栈处理后的最终隐藏状态序列 (final hidden states)，其形状为 <code>[batch_size, sequence_length, hidden_size]</code>，其中 <code>hidden_size</code> 为 1152。</li>
+    <li><strong>语言模型头 (LM Head) 与权重共享：</strong>
+        <ul>
+            <li>Gemma 模型采用权重共享 (tied weights) 策略，即语言模型头的权重与模型头部的词嵌入矩阵 (<code>model.embed_tokens.weight</code>) 的权重是相同的。为了将形状为 <code>[vocab_size, hidden_size]</code> (即 <code>[262144, 1152]</code>) 的词嵌入权重用于期望输入形状为 <code>[hidden_size, vocab_size]</code> 的 LM Head，模型在此处使用了一个 <code>Transpose</code> 节点，将词嵌入权重进行转置。</li>
+            <li><strong>最终 <code>MatMul</code>：</strong> 经过最终层归一化的隐藏状态序列与转置后的词嵌入权重进行一次矩阵乘法（<code>MatMul</code> 节点）。这个操作将每个位置的隐藏状态向量映射到整个词汇表的维度空间。</li>
+        </ul>
+    </li>
+    <li><strong>输出 <code>logits</code>：</strong> 这最后一个 <code>MatMul</code> 节点的输出即为模型的原始预测 <code>logits</code>，其形状为 <code>[batch_size, sequence_length, vocab_size]</code> (即 <code>[batch_size, sequence_length, 262144]</code>)。这些 logits 值随后可用于通过采样策略（如 argmax、top-k, top-p sampling）生成下一个 token。</li>
+</ul>
+<p>通过 Netron 的细致可视化分析，我们可以确认 <code>builder_simplified.py</code> 脚本依据原始 <code>config.json</code> 的定义，成功地将这个特定配置的 Gemma 3 模型的复杂内部架构——包括其独特的输入处理流程、嵌入缩放、包含 QK-Norm 和 RoPE 的分组查询注意力机制、门控线性单元激活的 MLP 模块、层层嵌套的归一化与残差连接，以及最终的权重共享语言模型头——精确且完整地映射为了一个结构清晰、层次分明的 ONNX 计算图。这为后续使用 ONNX Runtime 进行高效推理和进一步的跨平台部署奠定了坚实的基础。</p>
+
+<h3><code>onnx_progressive.py</code>：PC 端 Gemma 3 ONNX 模型推理验证</h3> <!-- 原 3.2.4 -->
+<p>为验证转换的 ONNX 模型，我编写了 <code>onnx_progressive.py</code> 脚本，使用 ONNX Runtime 在 PC 端 (CPU Provider) 进行自回归文本生成。</p>
+<p><strong>核心逻辑：</strong> 脚本模拟了 LLM 的逐 token 生成过程，关键在于正确管理 KV 缓存。它初始化空的 <code>past_key_values</code>，在每次推理时传入，并从输出中获取新的 <code>present_key_values</code> 用于下一次迭代。同时，动态更新 <code>input_ids</code> (下一个生成的 token)、<code>attention_mask</code> 和 <code>position_ids</code>。该脚本还依赖于 <code>builder_simplified.py</code> 生成的 <code>genai_config.json</code> 文件，该文件准确定义了ONNX模型的输入输出名称、层数、头数、隐藏层大小等关键元信息，确保了推理脚本与ONNX模型的接口一致性。</p>
+<p><strong>成功要素：</strong> 推理脚本的输入输出必须与 ONNX 模型定义完全匹配。KV 缓存的正确传递和更新是保证生成质量的关键。</p>
+<p>经过细致调试，该脚本成功在 PC 端对 <code>gemma-3-1b-onnx-gqa</code> 模型进行了有效推理，验证了 <code>builder_simplified.py</code> 转换工作的阶段性正确性。</p>
+<p><img src="images/onnx_progressive.png" alt="onnx_progressive.py 推理gemma-3-1b-onnx-gqa成功运行截图" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+
+<hr style="margin: 40px 0; border: 1px solid #ddd;">
+
+<h2>Google AI Edge 与 LiteRT (TensorFlow Lite) 生态系统</h2>
+<p>作为 Gemma 模型的创建者，谷歌官方也为 Gemma 3 的端侧部署提供了自家的解决方案，即 Google AI Edge 平台及其核心运行时 LiteRT (前身为 TensorFlow Lite)。虽然本项目未深入实践此路径，但对其进行了调研，以了解其潜力与特点。</p>
+
+<h3>Google AI Edge 概述及其对 Gemma 3 的支持</h3> <!-- 原 3.3.1 -->
+<p>Google AI Edge 是谷歌为在边缘设备（包括安卓）上高效运行 AI 模型而构建的平台。它提供了一套工具、SDK 和优化模型，旨在简化设备上 AI 的开发和部署。对于 Gemma 3，尤其是其轻量级版本如 Gemma 3 1B，Google AI Edge 被定位为官方推荐的设备上部署框架。其提供的 LLM Inference API 针对设备上的 LLM 推理进行了深度优化，官方数据显示 Gemma 3 1B (int4 量化) 在 Pixel 8 Pro 上通过此 API 可实现高达 2585 tok/sec 的预填充速度。此外，Google AI Edge 还提供了预构建的安卓 Demo 应用和优化后的 Gemma 3 1B int4 量化模型下载渠道。</p>
+
+<h3>LiteRT (TFLite)作为核心运行时</h3> <!-- 原 3.3.2 -->
+<p>LiteRT (Lite Runtime)，即 TensorFlow Lite 的新名称，是 Google AI Edge 的核心设备上运行时。它是一个成熟的、为移动和嵌入式设备设计的轻量级推理框架，支持将模型转换为 <code>.tflite</code> 格式。LiteRT 不仅支持 TensorFlow 模型，还通过 <code>ai-edge-torch</code> 等工具支持将 PyTorch 模型（如Gemma 3）转换为 <code>.tflite</code> 格式，并通过委托代理 (Delegates) 机制支持硬件加速。</p>
+
+<h3>Gemma 3 官方量化与 <code>.tflite</code> 转换路径</h3> <!-- 原 3.3.3 -->
+<p>谷歌官方为 Gemma 3 提供了经过量化感知训练 (QAT) 优化的版本，这对于在移动设备上保持高性能和低资源占用至关重要。对于基于 PyTorch 的 Gemma 3 模型，可以使用 Google AI Edge 提供的 <code>ai-edge-torch</code> 工具将其转换为优化的 <code>.tflite</code> 文件并进行量化。最终目标是生成一个高效的、量化后的 <code>.tflite</code> 模型，该模型可以在安卓设备上通过 LiteRT 运行时加载和执行，并能充分利用可用的硬件加速能力。</p>
+
+<hr style="margin: 40px 0; border: 1px solid #ddd;">
+
+<h2>不同部署路径的初步比较</h2> <!-- 原 3.4 -->
+<p>基于上述探索，我们可以对不同的部署路径进行初步的优劣势比较：</p>
+<table>
+    <thead>
+        <tr>
+            <th>特性</th>
+            <th>GGUF (<code>llama.cpp</code>)</th>
+            <th>ONNX (ONNX Runtime)</th>
+            <th>LiteRT (Google AI Edge)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>官方支持度 (Gemma 3)</td>
+            <td>社区驱动，但受益于官方GGUF模型提供</td>
+            <td>社区与厂商共同推动 (如 <code>onnxruntime-genai</code>)</td>
+            <td><strong>官方主导和深度优化 (尤其1B文本)</strong></td>
+        </tr>
+        <tr>
+            <td>易用性 (获取可用模型)</td>
+            <td>较高，有大量预转换的GGUF模型</td>
+            <td>转换过程复杂 (如Gemma 3需<code>builder</code>脚本)，对开发者要求高</td>
+            <td><strong>较高 (1B文本)</strong>，有官方优化模型和Demo，转换工具有针对性</td>
+        </tr>
+        <tr>
+            <td>优化程度</td>
+            <td>CPU优化良好，量化支持成熟</td>
+            <td>通用性强，性能依赖ORT优化和后端EP，需额外转换到设备特定格式</td>
+            <td><strong>针对性强</strong>，官方QAT量化，LLM专用API，软硬件协同潜力大</td>
+        </tr>
+        <tr>
+            <td>硬件加速</td>
+            <td>主要CPU，部分支持GPU；NPU/DSP支持有限</td>
+            <td>通过EP支持多种硬件，但移动端NPU/DSP需通过DLC等转换实现</td>
+            <td><strong>原生支持</strong>，通过委托代理利用GPU、NNAPI (间接访问NPU/DSP)</td>
+        </tr>
+        <tr>
+            <td>跨平台性</td>
+            <td>良好 (C++核心)</td>
+            <td><strong>极好</strong> (设计目标)</td>
+            <td>良好 (核心C++，但生态重心在Google平台)</td>
+        </tr>
+        <tr>
+            <td>生态系统</td>
+            <td><code>llama.cpp</code> 社区活跃</td>
+            <td>广泛的框架和工具支持</td>
+            <td>Google生态紧密集成 (Android Studio, MediaPipe)</td>
+        </tr>
+        <tr>
+            <td>当前Gemma 3 1B文本支持</td>
+            <td><strong>成熟可用 (本项目已验证)</strong></td>
+            <td><strong>技术上可行 (本项目已验证PC端转换与推理)</strong>，但端侧部署需额外工作</td>
+            <td><strong>官方推荐且优化程度高</strong></td>
+        </tr>
+        <tr>
+            <td>Gemma 3 多模态支持</td>
+            <td>实验性支持，性能瓶颈 (CPU处理视觉，本项目已验证)</td>
+            <td><strong>极具挑战</strong>，社区支持基本空白，转换复杂</td>
+            <td>理论上支持，但移动端优化和易用性细节<strong>有待官方进一步明确和提供</strong></td>
+        </tr>
+    </tbody>
+</table>
+<p><strong>初步结论:</strong></p>
+<ul>
+    <li><strong>GGUF (<code>llama.cpp</code>):</strong> 对于快速在 CPU 上运行 Gemma 3 (尤其是纯文本量化版)，是一个便捷且效果不错的选择。多模态能力受限于 CPU 视觉处理性能。</li>
+    <li><strong>ONNX (ONNX Runtime):</strong> 提供了通往多种硬件后端的桥梁，但 Gemma 3 的转换本身极具挑战性，需要深厚的技术积累。成功转换后，仍需依赖目标平台的工具链（如高通 SDK）进行进一步优化和部署才能充分利用硬件加速。</li>
+    <li><strong>LiteRT (Google AI Edge):</strong> 对于 Gemma 3 1B 文本模型，这是目前官方支持最完善、优化程度最高、也最易于在安卓设备上实现高性能部署的路径。其对多模态和更大尺寸模型的移动端优化支持值得期待。</li>
+</ul>
+
+<hr style="margin: 40px 0; border: 1px solid #ddd;">
+
+<h2>安卓平台性能、优化与挑战</h2> <!-- 原报告第4章 -->
+
+<p>在安卓平台上成功部署并运行 Gemma 3 这样的高级大语言模型，不仅需要克服技术集成上的障碍，更要在性能优化与资源限制之间取得精妙平衡。</p>
+<h3>关键性能指标</h3> <!-- 原 4.1 -->
+<p>评估 LLM 在安卓设备上表现的好坏，通常关注以下几个核心指标：</p>
+<ul>
+    <li><strong>延迟 (Latency):</strong> 首个 Token 生成时间 (TTFT) 和每输出 Token 时间 (TPOT)。</li>
+    <li><strong>内存占用 (Memory Usage):</strong> 峰值 RAM 消耗。</li>
+    <li><strong>功耗 (Power Consumption):</strong> 对电池续航的影响。</li>
+    <li><strong>模型加载时间 (Model Loading Time):</strong> 影响应用启动速度。</li>
+    <li><strong>准确性/质量 (Accuracy/Quality):</strong> 量化优化后模型输出质量。</li>
+</ul>
+
+<h3>端侧执行优化技术</h3> <!-- 原 4.2 -->
+<p>为了在资源有限的安卓设备上达到可接受的性能，必须采用一系列优化技术：</p>
+<ul>
+    <li><strong>量化 (Quantization):</strong> 如 Gemma 3 的官方 QAT 版本。</li>
+    <li><strong>硬件加速 (Hardware Acceleration):</strong> 利用 NPU, DSP, GPU，通过 NNAPI (TFLite/ORT) 或其他特定API。Google AI Edge 通过 LiteRT 旨在充分利用这些能力。<code>llama.cpp</code> 对移动 GPU 的支持可能也需要关注。</li>
+    <li>模型剪枝 (Pruning) 与稀疏化 (Sparsity)。</li>
+    <li>优化计算核心 (Optimized Kernels)。</li>
+    <li>KV 缓存管理 (KV Caching Management): Gemma 3 的交错式注意力机制本身就是一种优化。</li>
+</ul>
+
+<h3>移动 LLM 部署的常见挑战</h3> <!-- 原 4.3 -->
+<ul>
+    <li>严格的资源限制：内存、处理能力、存储空间。</li>
+    <li>散热问题：高强度推理导致设备过热和性能降频。</li>
+    <li>应用包体大小：大型模型文件导致 APK 臃肿。</li>
+    <li>安卓生态系统的碎片化：硬件配置和操作系统版本各异。</li>
+    <li>后台执行限制：操作系统对后台进程的限制。</li>
+    <li>量化后的模型质量维护：激进量化可能导致性能下降。</li>
+</ul>
+<p>Gemma 3 在安卓设备上的实际性能表现，是其架构固有效率与先进量化技术协同作用的结果。未来端侧 LLM 性能的提升，将更依赖于模型架构本身就为边缘计算和量化进行协同设计。模型加载时间和硬件加速效果的不可预测性（尤其对于NNAPI）是移动端部署需要重点关注和解决的难题。</p>
+
+<hr style="margin: 40px 0; border: 1px solid #ddd;">
+
+<h2>未竟工作与未来展望</h2> <!-- 原报告第5章 -->
+<p>尽管本项目在 GGUF 部署和 Gemma 3 文本模型的 ONNX 转换研究上取得了一定进展，但距离在安卓设备上高效运行（尤其是利用 NPU 加速）Gemma 3 多模态模型，以及完成 ONNX 到高通 DLC 的完整转换与优化流程，仍有许多工作因其巨大的复杂性和时间所限未能完成。</p>
+
+<h3>Gemma 3 多模态 ONNX 转换的深入探索</h3> <!-- 原 5.1 -->
+<p>将 Gemma 3 的多模态能力（特别是其 SigLIP 视觉编码器和图文融合机制）完整且高效地转换为 ONNX 格式，是一个巨大的挑战。主要原因如下：</p>
+<ul>
+    <li><strong>社区资料与工具匮乏：</strong> 目前社区几乎没有 Gemma 3 多模态完整链路转 ONNX 的成熟方案和成功案例。</li>
+    <li><strong>视觉编码器转换复杂性：</strong> 需要深入理解 SigLIP 的架构和 PyTorch 实现，并将其所有操作（包括复杂的图像预处理如“Pan & Scan”）精确映射为 ONNX 算子。</li>
+    <li><strong>图文融合机制的ONNX实现：</strong> 在 ONNX 中精确复现视觉 token 和文本 token 的交互方式（如双向注意力对图像，单向对文本）是核心难点。</li>
+    <li><strong><code>AutoProcessor</code>的解构：</strong> Hugging Face 的 <code>AutoProcessor</code> 封装了文本和图像的复杂预处理，这些逻辑也需要被忠实地转换为 ONNX 算子或在推理时精确复现。</li>
+</ul>
+<p>完成此项工作需要对视觉模型、多模态融合机制以及 ONNX 规范有极深的理解，远超本项目的时间和资源范围。</p>
+
+<h3>ONNX 到高通 DLC 转换与硬件加速：未能完成的环节与预期困难</h3> <!-- 原 5.2 -->
+<p>本项目原计划将成功转换的 <code>gemma-3-1b-onnx-gqa.onnx</code> 模型进一步通过高通的 SNPE (Snapdragon Neural Processing Engine) 或 QNN (Qualcomm AI Engine Direct) SDK 转换为 DLC (Deep Learning Container) 格式，并进行 INT8 量化，最终在骁龙870的NPU上进行部署和性能测试。然而，由于以下原因，此部分工作未能完成：</p>
+<ul>
+    <li><strong>转换工具链的学习成本与复杂性：</strong> 熟练掌握高通的 SDK，理解其模型分析、转换流程、量化方法（如PTQ的校准数据集准备）以及调试工具，需要投入大量的时间和精力进行专门学习。</li>
+    <li><strong>ONNX 算子兼容性的高度不确定性：</strong> 这是最大的技术风险。高通 AI 引擎的 DLC 转换工具对其支持的 ONNX 算子有严格列表和版本要求。<code>builder_simplified.py</code> 生成的 ONNX 模型中，虽然使用了 <code>com.microsoft.GroupQueryAttention</code> 等融合算子，但其内部具体实现以及模型中其他非标准或复杂的算子组合（如 RoPE 的精确实现、RMSNorm 的特定组合）是否能被高通工具链完美支持并高效转换为针对 NPU 的指令，是未知数。一旦出现算子不支持或转换错误，就需要进行复杂的算子替换、模型修改或编写用户自定义层（UDL），这对于个人项目而言难度极大。</li>
+    <li><strong>量化挑战：</strong> 即使模型能成功转换为 DLC，后续的 INT8 量化也需要仔细的校准过程，以在大幅提升速度的同时，将精度损失控制在可接受范围内。不当的量化可能导致模型性能严重下降。</li>
+    <li><strong>时间限制：</strong> 鉴于课程项目的时间周期，深入研究并解决上述潜在的转换和量化问题超出了可行范围。GGUF路径的实践和ONNX的复杂转换已占据了绝大部分研究精力。</li>
+</ul>
+<p>因此，ONNX到DLC的转换和硬件加速部分，作为更深层次的端侧优化，构成了本项目的“未竟工作”。</p>
+
+<h3>多模态模型在移动端的性能预估与优化方向</h3> <!-- 原 5.3 -->
+<ul>
+    <li><strong>GGUF (CPU):</strong> 已验证图像处理部分耗时巨大，不适合对性能有要求的场景。</li>
+    <li><strong>ONNX -> DLC (NPU) (预估):</strong> 若能成功转换 Gemma 3 4B 多模态模型，视觉编码器部分的计算量依然庞大。乐观情况下，图像编码耗时有望从 CPU 的数十秒降低到数百毫秒至秒级。整体图文首次响应时间达到秒级仍极具挑战，但相比纯 CPU 会有质的飞跃。</li>
+    <li><strong>Google AI Edge/LiteRT (预估):</strong> 如果 Google 官方提供针对 Gemma 3 多模态的优化 <code>.tflite</code> 模型和运行时支持，并能有效利用 NPU，其性能表现值得期待。目前公开的移动端优化主要集中在 Gemma 3 1B 文本模型。</li>
+</ul>
+<p><strong>未来优化方向:</strong> 模型结构优化（更轻量视觉编码器）、混合精度与异构计算、针对性的算子融合与硬件指令优化。</p>
 
 <h2>附录</h2>
 

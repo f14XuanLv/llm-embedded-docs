@@ -252,6 +252,14 @@ body {
     white-space: pre;
 }
 
+/* --- 新增长代码块样式 --- */
+.code-container.long-code-block .code-content {
+    max-height: 1800px; /* 更大的高度 */
+    font-size: 0.85rem; /* 稍小的字体 */
+}
+/* --- 结束新增长代码块样式 --- */
+
+
 /* 旧样式覆盖 */
 #content-container pre {
     background-color: transparent;
@@ -349,6 +357,11 @@ body {
     
     .code-container {
         margin: 15px 0;
+    }
+
+    /* 确保长代码块在移动端也能适配 */
+    .code-container.long-code-block .code-content {
+        max-height: 60vh; /* 或者一个适合移动端的高度 */
     }
 
     .table-container {

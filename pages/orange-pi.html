@@ -3,11 +3,9 @@
 <h2>部署纯文本llm</h2>
 
 <h3>测试香橙派</h3>
-
 <p>按照用户手册逐步测试即可</p>
 
 <h3>克隆并编译llama.cpp</h3>
-
 <ul>
     <li><strong>作用</strong>：<code>llama.cpp</code> 是一个纯 C/C++ 实现的推理引擎，专门为在本地设备（如香橙派这类资源受限的硬件）上高效运行大语言模型（如 LLaMA、Gemma 等）而设计。</li>
     <li><strong>场景</strong>：
@@ -15,17 +13,14 @@
 </ul>
 
 <h4>克隆llama.cpp</h4>
-
 <pre><code class="language-bash">
 git clone https://github.com/ggml-org/llama.cpp
 cd llama.cpp
 </code></pre>
-
 <p>一般情况下如果要从Github上克隆代码，香橙派需要使用网络代理，
 我选择在电脑上下载，然后通过WinSCP将文件传输到香橙派上。下面的模型文件同理。</p>
 
 <h4>编译llama.cpp</h4>
-
 <pre><code class="language-bash">
 mkdir build
 cd build
@@ -34,44 +29,34 @@ make -j8 # 使用8个线程编译
 </code></pre>
 
 <h3>下载模型</h3>
-
 <p>推荐直接去
 <a href="https://huggingface.co/Mungert/gemma-3-1b-it-gguf/tree/main" target="_blank">https://huggingface.co/Mungert/gemma-3-1b-it-gguf/tree/main</a>
 下载</p>
-
 <p><img src="images/Download_gemma-3-1b-it-gguf.png" alt="下载模型" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
-
 <p>google_gemma-3-1b-it-q4_k.gguf<br>
 然后通过WinSCP传输，将其放置在 llama.cpp/models/ 目录下</p>
 
 <h3>运行模型</h3>
-
 <pre><code class="language-bash">
 ./build/bin/llama-cli -m ./models/google_gemma-3-1b-it-q4_k.gguf
 </code></pre>
-
-<p><img src="emptyPicture" alt="留空后续填充" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p><img src="images/image-20250422230417527-1747302916832-2.png" alt="运行纯文本模型截图" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <h2>部署图生文llm</h2>
-
 <p>Gemma3 支持图生文的最小的模型是 Gemma3-4B，以此为例</p>
 
 <h3>测试香橙派上运行Gemma3-4B多模态的效果</h3>
 
 <h4>首先下载 Gemma3-4B的模型文件</h4>
-
 <p>进入 <a href="https://huggingface.co/Mungert/gemma-3-4b-it-gguf/tree/main" target="_blank">https://huggingface.co/Mungert/gemma-3-4b-it-gguf/tree/main</a></p>
-
 <p>选择两个 Gemma3-4B 中轻量的文本模型和图像嵌入模型，<br>
 分别是：<br>
 gemma-3-4b-it-q4_k_s.gguf<br>
 google_gemma-3-4b-it-mmproj-q8.gguf<br>
 下载后使用 WinSCP传输到香橙派的 llama.cpp/models/ 目录下</p>
-
 <p><img src="images/normal_and_mmproj.png" alt="模型文件" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <h4>然后运行模型</h4>
-
 <pre><code class="language-bash">
 cd llama.cpp # 进入 llama.cpp 目录
 
@@ -79,66 +64,258 @@ cd llama.cpp # 进入 llama.cpp 目录
     -m models/google_gemma-3-4b-it-q4_k_s.gguf \
     --mmproj models/google_gemma-3-4b-it-mmproj-q8.gguf
 </code></pre>
-
 <p>运行成功，提示输入图片的指令</p>
 <p><img src="images/image_input_tips.png" alt="输入图片提示" style="max-width: 80%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
-
 <p>在特定目录准备一张小图片，<br>
 我将测试图放在了 /llama.cpp/image/orangepi_test.jpg</p>
-
 <p>这是一张很小的图片，仅48*48</p>
-
 <p>输入图片，相对路径或绝对路径</p>
-
-<pre><code class="language-bash">/image ./image/orangepi_test.jpg</code></pre>
-
+<pre><code class="language-bash">
+/image ./image/orangepi_test.jpg
+</code></pre>
+<p><img src="images/image-20250515175307435.png" alt="图生文模型输入图片后截图" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 <p>编码图片大约要5-6分钟</p>
-
 <p>解码图片大约要1分钟</p>
-
 <p>速度显然过慢</p>
 
 <h2>模型转换&推理优化</h2>
-
 <p>香橙派搭载华为昇腾 NPU，可对模型针对该芯片进行推理优化。</p>
-
 <p><a href="https://huggingface.co/google/gemma-3-4b-it-qat-int4-unquantized" target="_blank">https://huggingface.co/google/gemma-3-4b-it-qat-int4-unquantized</a></p>
-
 <p>选择最新的量化训练过的模型进行转换</p>
 
-<h3>模型转换流程</h3>
+<h3><strong>模型转换流程</strong></h3>
 
 <h4>原始模型 → ONNX</h4>
-
 <p><strong>工具</strong>：使用 Hugging Face 的 <code>transformers</code> + <code>torch.onnx</code> 导出 ONNX。</p>
-
 <p><a href="https://huggingface.co/docs/transformers/serialization" target="_blank">ONNX</a></p>
 
-<h4>ONNX → 昇腾 OM 模型</h4>
+<h5>使用conda创建新环境（推荐使用Python 3.10）</h5>
+<pre><code class="language-bash">
+conda create -n gemma_onnx python=3.10
+conda activate gemma_onnx
+</code></pre>
 
+<h5>安装基础依赖和Microsoft的ONNX Runtime GenAI工具</h5>
+<pre><code class="language-bash">
+pip install torch transformers huggingface_hub onnxruntime-genai
+</code></pre>
+
+<h5>登录到Hugging Face（可能需要）</h5>
+<pre><code class="language-bash">
+huggingface-cli login
+</code></pre>
+
+<h5>使用onnxruntime-genai转换模型</h5>
+<pre><code class="language-bash">
+python -m onnxruntime_genai.models.builder \
+  -m google/gemma-3-1b-it \
+  -o ./gemma_onnx_output \
+  -p fp16 \
+  -e cpu \
+  -c ./gemma_cache
+</code></pre>
+
+<h5>运行转换后的模型</h5>
+<pre><code class="language-python">
+# test_gemma_progressive.py
+from transformers import AutoConfig, AutoTokenizer
+import onnxruntime
+import numpy as np
+import json
+import os
+import time
+
+# 1. 加载配置、分词器和模型
+path_to_model = "./gemma_onnx_output"
+config = AutoConfig.from_pretrained(path_to_model)
+tokenizer = AutoTokenizer.from_pretrained(path_to_model)
+
+# 从genai_config.json获取正确的配置值
+with open(os.path.join(path_to_model, "genai_config.json"), "r") as f:
+    genai_config = json.load(f)
+
+decoder_config = genai_config["model"]["decoder"]
+num_attention_heads = decoder_config["num_attention_heads"]
+num_key_value_heads = decoder_config["num_key_value_heads"]
+num_hidden_layers = decoder_config["num_hidden_layers"]
+head_dim = decoder_config["head_size"]
+hidden_size = decoder_config["hidden_size"]
+
+# 获取eos_token_id
+eos_token_id = genai_config["model"]["eos_token_id"]
+if isinstance(eos_token_id, list):
+    eos_token_id = eos_token_id
+else:
+    eos_token_id = [eos_token_id]
+
+print(f"模型配置: heads={num_attention_heads}, kv_heads={num_key_value_heads}, layers={num_hidden_layers}, head_dim={head_dim}")
+
+# 配置ONNX会话选项
+session_options = onnxruntime.SessionOptions()
+# 启用内存优化
+session_options.enable_mem_pattern = True
+session_options.enable_mem_reuse = True
+# 启用图优化
+session_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+
+print("可用执行提供程序:", onnxruntime.get_available_providers())
+model_session = onnxruntime.InferenceSession(os.path.join(path_to_model, "model.onnx"), session_options)
+print("已加载模型")
+
+# 2. 准备输入 - 创建消息
+messages = [
+    {"role": "user", "content": "用简短的话解释什么是人工智能"}
+]
+
+# 应用分词器
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, 
+                                     tokenize=True, return_dict=True, return_tensors="np")
+
+# 输出输入token的信息，帮助调试
+input_ids = inputs['input_ids']
+print(f"输入tokens的形状: {input_ids.shape}")
+print(f"输入tokens: {input_ids[0].tolist()}")
+
+# 开始生成
+print("开始生成回答...")
+print(f"提示: {tokenizer.decode(inputs['input_ids'][0])}\n")
+print("生成的回答:", end="", flush=True)
+
+max_new_tokens = 256
+generated_ids = []
+
+# 关键修改: 渐进式推理
+# 每次推理一个token，保持cumulative方式
+try:
+    # 初始化
+    batch_size = 1
+    seq_len = input_ids.shape[1]
+    current_ids = input_ids
+    
+    # 存储所有生成的token IDs
+    all_token_ids = input_ids[0].tolist()
+    
+    # 推理循环
+    for i in range(max_new_tokens):
+        # 准备推理输入
+        # 注意: 我们每次都处理当前的所有tokens，而不是只处理新token
+        inference_inputs = {
+            'input_ids': current_ids,
+            'attention_mask': np.ones(current_ids.shape, dtype=np.int64),
+            'position_ids': np.arange(current_ids.shape[1], dtype=np.int64).reshape(1, -1)
+        }
+        
+        # 添加past_key_values (全零，因为我们每次都用完整序列)
+        for layer in range(num_hidden_layers):
+            inference_inputs[f'past_key_values.{layer}.key'] = np.zeros([batch_size, num_key_value_heads, 0, head_dim], dtype=np.float16)
+            inference_inputs[f'past_key_values.{layer}.value'] = np.zeros([batch_size, num_key_value_heads, 0, head_dim], dtype=np.float16)
+            
+        # 运行推理
+        t0 = time.time()
+        outputs = model_session.run(None, inference_inputs)
+        t1 = time.time()
+        
+        if i == 0:
+            print(f"\n首次推理耗时: {(t1-t0)*1000:.1f}ms")
+        
+        # 解包输出 (logits)
+        logits = outputs[0]
+        
+        # 从logits中获取下一个token
+        next_token_id = logits[:, -1, :].argmax(-1).reshape(-1, 1)
+        token_id_value = next_token_id[0, 0]
+        
+        # 添加到生成的token列表
+        generated_ids.append(token_id_value)
+        all_token_ids.append(token_id_value)
+        
+        # 实时打印生成的token
+        print(tokenizer.decode([token_id_value]), end="", flush=True)
+        
+        # 检查是否生成了结束标记
+        if token_id_value in eos_token_id:
+            print(f"\n检测到结束标记: {token_id_value}")
+            break
+            
+        # 关键点: 使用累积的序列作为下一次输入
+        # 这里我们可以选择两种策略：
+        
+        # 策略1: 使用完整的累积序列 (可能会较慢但更稳定)
+        current_ids = np.array([all_token_ids], dtype=np.int64)
+        
+        # 策略2: 仅使用最近的N个token (可能更快但需要调整N)
+        # context_window = 32  # 调整此值适应你的需求
+        # if len(all_token_ids) > context_window:
+        #    current_ids = np.array([all_token_ids[-context_window:]], dtype=np.int64)
+        # else:
+        #    current_ids = np.array([all_token_ids], dtype=np.int64)
+        
+except Exception as e:
+    print(f"\n出错了: {e}")
+    import traceback
+    traceback.print_exc()
+    
+print("\n\n完整生成结果:")
+print(tokenizer.decode(generated_ids))
+</code></pre>
+
+<h4><strong>ONNX → 昇腾 OM 模型</strong>尝试</h4>
 <p><strong>工具</strong>：使用华为的 <strong>ATC（Ascend Tensor Compiler）</strong> 工具转换。</p>
-
 <p><a href="https://www.hiascend.com/document" target="_blank">昇腾文档-昇腾社区</a></p>
 
-<h4>部署方案</h4>
+<h5>1、下载安装CANN工具包</h5>
+<p>从华为昇腾社区下载适用于 Orange Pi Kunpeng Pro 昇腾芯片的 CANN 工具包（通常是一个 .run 安装包）。我下载的是版本8.2.RC1.alpha001。</p>
+<p>运行 CANN 安装程序：</p>
+<pre><code class="language-bash">
+chmod +x Ascend-cann-toolkit_X.X.X_linux-arch.run
+./Ascend-cann-toolkit_X.X.X_linux-arch.run --install-path=/path/to/your/CANN_install_dir
+</code></pre>
 
-<h5>(1) 直接调用 OM 模型</h5>
-<ul>
-    <li>使用昇腾的 <strong>MindX SDK</strong> 或 <strong>AscendCL</strong> 接口加载 OM 模型：</li>
-</ul>
+<h5>2、创建并配置conda环境</h5>
+<pre><code class="language-bash">
+conda create -n onnx2om python=3.10 #推荐使用CANN文档中指定的Python版本
+conda activate onnx2om
+</code></pre>
+<p>在conda环境中设置CANN环境变量</p>
+<pre><code class="language-bash">
+source /path/to/your/CANN_install_dir/ascend-toolkit/latest/bin/set_env.sh
+</code></pre>
+<p>检查atc工具是否安装成功</p>
+<pre><code class="language-bash">
+atc --help
+</code></pre>
+<p><img src="images/wps1.jpg" alt="ATC工具帮助信息" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p>注意set_env.sh文件中LD_LIBRARY_PATH要修改为当前的硬件版本x86_64。文件中内容也可能需要根据报错提示做相应修改。我遇到的报错如下：</p>
+<p><img src="images/wps2.jpg" alt="CANN环境变量报错" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p>就查看该文件路径和set_env.sh中LD_LIBRARY_PATH环境变量是否包含该路径，若否，则需要手动加入。</p>
+<p><img src="images/wps3.jpg" alt="set_env.sh文件内容" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p>安装其他依赖</p>
+<pre><code class="language-bash">
+pip install onnx 
+pip install onnxruntime # 可选，用于验证ONNX模型 
+pip install protobuf # ONNX 通常依赖这个，要根据安装的CANN版本安装。我安装的6.30.2
+pip install scipy pulp attrs psutil absl-py cloudpickle ml-dtypes tornado decorator
+</code></pre>
 
-<h5>(2) 使用 MindSpore Lite</h5>
-<ul>
-    <li>将 OM 模型转换为 MindSpore Lite 格式，适用于边缘设备：</li>
-</ul>
+<h5>3、使用atc工具进行模型转换</h5>
+<p>我使用的命令如下：</p>
+<pre><code class="language-bash">
+atc --model=./model.onnx \
+  --framework=5 \
+  --output=gemma3-1b-fp32-1.om \
+  --input_format=NCHW \
+  --input_shape="input_ids:1,-1;attention_mask:1,-1;position_ids:1,-1" \
+  --soc_version=Ascend310
+</code></pre>
+<p><img src="images/wps4.jpg" alt="ATC转换命令及报错" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
+<p>最终报错如上</p>
+<p>查阅资料得知当模型包含自定义算子或混合不同版本的组件时，onnxruntime-genai在转换模型时可能会引入多个domain_version字段，与 ATC 工具要求的单个domain_version冲突。onnxruntime-genai工具不支持通过opset_version指定单一版本，查阅资料也未找到相应解决方法，遂放弃。另一种可行方案是使用torch工具进行原模型到ONNX模型的转换，但因为模型过新，会遇到算子不支持等多个问题。</p>
+<p><img src="images/wps5.jpg" alt="ONNX多domain_version问题" style="max-width: 90%; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"></p>
 
 <h2>外设配置</h2>
-
 <h3>摄像头使用</h3>
 <p>连接摄像头后按照用户手册检查摄像头是否被检测到</p>
-
 <p>编写python脚本使用摄像头拍照</p>
-
 <pre><code class="language-python">
 import os
 import time
@@ -191,9 +368,7 @@ arecord -D hw:0,0 -f cd -c 1 -d 10 ./testaudio.wav
 # 播放录制的音频
 aplay ./testaudio.wav
 </code></pre>
-
 <p>使用python脚本进行语音识别。要先安装</p>
-
 <pre><code class="language-python">
 import pyaudio
 import vosk
